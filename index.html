@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>T-MINUS – Exam Countdown</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyDoIrKyweKfpXbWz_sT63uEXsJqIO1wyzo",
+      authDomain: "t-minus-810ab.firebaseapp.com",
+      projectId: "t-minus-810ab",
+      storageBucket: "t-minus-810ab.firebasestorage.app",
+      messagingSenderId: "300879056115",
+      appId: "1:300879056115:web:735b602ea8d29b79393b86"
+    });
+    var db = firebase.firestore();
+    function fbSave(key, val) { return db.collection("appdata").doc(key).set({value: JSON.stringify(val)}, {merge: true}); }
+    function fbListen(key, cb) { return db.collection("appdata").doc(key).onSnapshot(function(snap){ if(snap.exists){ try{ cb(JSON.parse(snap.data().value)); }catch(e){} } }); }
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #000; color: #fff; font-family: 'Space Mono', monospace; min-height: 100vh; }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+    @keyframes pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }
+    input, textarea, button, select { font-family: 'Space Mono', monospace; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.3); border-radius: 4px; }
+    input[type="date"] { color-scheme: dark; }
+    #app { display: flex; flex-direction: column; align-items: center; padding: 32px 20px 60px; }
+    #loader { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 20px; }
+    .spinner { width: 48px; height: 48px; border: 3px solid rgba(99,102,241,0.2); border-top: 3px solid #6366f1; border-radius: 50%; animation: spin 1s linear infinite; }
+    .loader-text { font-size: 11px; color: rgba(255,255,255,0.4); letter-spacing: 3px; animation: pulse 1.5s ease infinite; }
+    .exam-grid { width: 100%; max-width: 640px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .exam-card { border-radius: 20px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+    .exam-card.expanded { border: 2px solid var(--color); box-shadow: 0 0 32px color-mix(in srgb, var(--color) 20%, transparent); }
+    .exam-card.pinned { border: 2px solid color-mix(in srgb, var(--color) 50%, transparent); }
+    .card-body { height: 80px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; position: relative; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; position: absolute; top: 14px; left: 14px; }
+    .card-title { padding-left: 16px; }
+    .card-subject { font-size: 9px; color: rgba(255,255,255,0.5); letter-spacing: 2px; margin-bottom: 4px; }
+    .card-name { font-family: 'Bebas Neue', sans-serif; font-size: clamp(16px,4vw,22px); letter-spacing: 2px; line-height: 1; }
+    .card-days { text-align: center; flex-shrink: 0; }
+    .days-num { font-family: 'Bebas Neue', sans-serif; font-size: 32px; line-height: 1; }
+    .days-label { font-size: 8px; color: rgba(255,255,255,0.4); letter-spacing: 2px; margin-top: 2px; }
+    .progress-bar { padding: 8px 18px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); }
+    .progress-track { width: 100%; height: 2px; border-radius: 1px; background: rgba(255,255,255,0.06); overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 1px; transition: width 1s ease; }
+    .details-panel { padding: 16px 18px; border-top: 1px solid rgba(255,255,255,0.06); }
+    .time-boxes { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    .time-box { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 14px; text-align: center; }
+    .time-val { font-family: 'Bebas Neue', sans-serif; font-size: 22px; line-height: 1; }
+    .time-lbl { font-size: 8px; color: rgba(255,255,255,0.35); letter-spacing: 2px; margin-top: 3px; }
+    .options-btn { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 10px; color: rgba(255,255,255,0.6); letter-spacing: 1px; }
+    .options-menu { position: absolute; bottom: 44px; left: 0; z-index: 20; background: #1a1a2e; border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 4px; min-width: 150px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+    .opt-btn { background: rgba(255,255,255,0.06); border: none; border-radius: 8px; padding: 8px 12px; color: #fff; font-size: 10px; cursor: pointer; text-align: left; letter-spacing: 1px; }
+    .opt-btn:hover { background: rgba(255,255,255,0.12); }
+    .hero { width: 100%; max-width: 640px; margin-bottom: 28px; border-radius: 20px; padding: 20px 24px; display: flex; align-items: center; gap: 20px; animation: float 5s ease-in-out infinite; }
+    .hero-days { font-family: 'Bebas Neue', sans-serif; font-size: clamp(28px,6vw,48px); line-height: 1; text-align: center; }
+    .section { width: 100%; max-width: 640px; }
+    .admin-panel { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; width: 100%; max-width: 640px; margin-bottom: 40px; overflow: hidden; }
+    .tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,0.08); overflow-x: auto; }
+    .tab { flex: 1; padding: 10px 0; font-size: 10px; letter-spacing: 1px; border: none; cursor: pointer; background: transparent; color: rgba(255,255,255,0.4); border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; }
+    .tab.active { background: rgba(255,255,255,0.12); color: #fff; border-bottom: 2px solid #fff; }
+    .tab-content { padding: 24px; }
+    .input-field { width: 100%; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 10px 14px; color: #fff; font-size: 12px; font-family: 'Space Mono', monospace; outline: none; }
+    .label { font-size: 9px; color: rgba(255,255,255,0.4); letter-spacing: 2px; margin-bottom: 6px; margin-top: 14px; display: block; }
+    .btn-green { background: #22c55e; border: none; border-radius: 10px; padding: 11px; color: #000; font-size: 11px; letter-spacing: 2px; cursor: pointer; font-weight: 700; width: 100%; }
+    .btn-outline { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 11px 16px; color: rgba(255,255,255,0.5); font-size: 11px; cursor: pointer; }
+    .btn-red { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; padding: 11px 16px; color: #ef4444; font-size: 11px; cursor: pointer; }
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 999; backdrop-filter: blur(6px); }
+    .modal { background: #0f0f1a; border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 32px; width: 320px; animation: fadeIn 0.2s ease; }
+    .sync-toast { position: fixed; bottom: 20px; right: 20px; z-index: 999; border-radius: 10px; padding: 8px 16px; font-size: 10px; color: #fff; letter-spacing: 1px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); animation: fadeIn 0.2s ease; }
+    .color-dot { width: 26px; height: 26px; border-radius: 6px; cursor: pointer; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.2); display: inline-block; }
+    .color-dot.selected { border: 2px solid #fff; }
+    .search-box { width: 100%; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 10px 14px 10px 38px; color: #fff; font-size: 13px; font-family: 'Space Mono', monospace; outline: none; box-sizing: border-box; }
+    .pinned-badge { position: absolute; top: 8px; left: 8px; z-index: 10; background: var(--color); border-radius: 6px; padding: 2px 8px; font-size: 9px; color: #fff; letter-spacing: 1px; }
+    .menu-dropdown { position: absolute; top: 44px; right: 0; background: #0f0f1a; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; padding: 8px; min-width: 180px; box-shadow: 0 16px 48px rgba(0,0,0,0.7); animation: fadeIn 0.15s ease; z-index: 100; }
+    .theme-btn { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; border: none; cursor: pointer; background: transparent; margin-bottom: 4px; }
+    .theme-swatch { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+    .font-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 7px 14px; color: #fff; font-size: 14px; cursor: pointer; }
+    .font-btn.selected { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.5); }
+    .preset-color { width: 22px; height: 22px; border-radius: 5px; cursor: pointer; display: inline-block; border: 1px solid rgba(255,255,255,0.15); margin: 2px; }
+    .preset-color.selected { border: 2px solid rgba(255,255,255,0.8); }
+    .exam-row { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+    .toggle { width: 34px; height: 18px; border-radius: 9px; cursor: pointer; position: relative; transition: background 0.2s; flex-shrink: 0; }
+    .toggle-knob { position: absolute; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left 0.2s; }
+  </style>
+</head>
+<body>
+<div id="loader">
+  <div class="spinner"></div>
+  <div class="loader-text">CONNECTING TO FIREBASE...</div>
+  <div style="font-size:9px;color:rgba(255,255,255,0.2);letter-spacing:1px">syncing your data across all devices</div>
+</div>
+<div id="app" style="display:none"></div>
+
+<script>
+// ── Data ──────────────────────────────────────────────────────
+var state = {
+  theme: {bgColor:"#000000", fontColor:"#ffffff", fontFamily:"'Bebas Neue', sans-serif"},
+  exams: [], ads: [], media: null, quote: "",
+  adminUnlocked: false, adminOpen: false, adminTab: "exams",
+  expandedId: null, showMenu: false, searchQuery: "", showHidden: false,
+  showPwPrompt: false, pwInput: "", pwError: false, tapCount: 0,
+  editingExam: null, examDraft: null,
+  isDark: true, syncStatus: "", savedTheme: false, savedMedia: false,
+  draftTheme: {bgColor:"#000000", fontColor:"#ffffff", fontFamily:"'Bebas Neue', sans-serif"},
+  draftMedia: null, draftQuote: "",
+  now: new Date()
+};
+var tapTimer = null;
+var ADMIN_PASSWORD = "admin123";
+var EXAM_COLORS = ["#6366f1","#f59e0b","#22c55e","#ef4444","#06b6d4","#a855f7","#f97316","#ec4899","#14b8a6","#84cc16"];
+var FONTS = [
+  {label:"Bebas Neue", value:"'Bebas Neue', sans-serif"},
+  {label:"Space Mono", value:"'Space Mono', monospace"},
+  {label:"Georgia", value:"Georgia, serif"},
+  {label:"Arial Black", value:"'Arial Black', sans-serif"},
+  {label:"Courier New", value:"'Courier New', monospace"},
+  {label:"Impact", value:"Impact, sans-serif"}
+];
+var PRESET_QUOTES = [
+  "Push yourself, because no one else is going to do it for you.",
+  "Great things never come from comfort zones.",
+  "Dream it. Wish it. Do it.",
+  "Don't stop when you're tired. Stop when you're done.",
+  "Wake up with determination. Go to bed with satisfaction.",
+  "Little progress each day adds up to big results."
+];
+var BG_PRESETS = ["#000000","#0a0a0a","#111827","#1e293b","#0d1117","#1a1a2e","#14213d","#f0f4ff"];
+var FG_PRESETS = ["#ffffff","#f1f5f9","#fbbf24","#34d399","#60a5fa","#f87171","#c084fc","#fb923c"];
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+function getDaysLeft(d) {
+  if (!d) return null;
+  var e = new Date(d); e.setHours(0,0,0,0);
+  var t = new Date(); t.setHours(0,0,0,0);
+  return Math.ceil((e - t) / 86400000);
+}
+function formatDate(d) {
+  if (!d) return "";
+  return new Date(d + "T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"});
+}
+function urgency(days) {
+  if (days === null) return "#6366f1";
+  if (days < 0) return "#6b7280";
+  if (days <= 3) return "#ef4444";
+  if (days <= 7) return "#f59e0b";
+  if (days <= 30) return "#f97316";
+  return "#22c55e";
+}
+function el(tag, attrs, children) {
+  var e = document.createElement(tag);
+  if (attrs) Object.keys(attrs).forEach(function(k) {
+    if (k === 'style' && typeof attrs[k] === 'object') {
+      Object.assign(e.style, attrs[k]);
+    } else if (k.startsWith('on')) {
+      e.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+    } else if (k === 'className') {
+      e.className = attrs[k];
+    } else if (k === 'htmlFor') {
+      e.htmlFor = attrs[k];
+    } else {
+      e[k] = attrs[k];
+    }
+  });
+  if (children) {
+    if (!Array.isArray(children)) children = [children];
+    children.forEach(function(c) {
+      if (c === null || c === undefined) return;
+      if (typeof c === 'string' || typeof c === 'number') {
+        e.appendChild(document.createTextNode(c));
+      } else {
+        e.appendChild(c);
+      }
+    });
+  }
+  return e;
+}
+function t(text) { return document.createTextNode(String(text)); }
+
+// ── Firebase sync ─────────────────────────────────────────────
+function showSync(status) {
+  state.syncStatus = status;
+  var existing = document.getElementById('sync-toast');
+  if (existing) existing.remove();
+  if (!status) return;
+  var toast = el('div', {
+    id: 'sync-toast',
+    className: 'sync-toast',
+    style: {background: status === 'saving' ? 'rgba(99,102,241,0.95)' : 'rgba(34,197,94,0.95)'}
+  }, [status === 'saving' ? '⏳ SYNCING...' : '✅ SYNCED TO ALL DEVICES']);
+  document.body.appendChild(toast);
+  if (status === 'saved') setTimeout(function(){ toast.remove(); }, 2000);
+}
+function saveData(key, val) {
+  showSync('saving');
+  return fbSave(key, val).then(function(){ showSync('saved'); });
+}
+
+// ── Render ────────────────────────────────────────────────────
+function render() {
+  var app = document.getElementById('app');
+  app.innerHTML = '';
+  app.style.background = state.theme.bgColor;
+  document.body.style.background = state.theme.bgColor;
+  document.body.style.color = state.theme.fontColor;
+  app.appendChild(buildApp());
+}
+
+function buildApp() {
+  var frag = document.createDocumentFragment();
+  var theme = state.theme;
+  var fg = theme.fontColor;
+  var bg = theme.bgColor;
+
+  // Header
+  var headerWrap = el('div', {style:{textAlign:'center',marginBottom:'32px',width:'100%',maxWidth:'640px',animation:'fadeIn 0.6s ease'}});
+  var timeStr = state.now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"}) + ' · ' + state.now.toLocaleTimeString();
+  headerWrap.appendChild(el('div', {style:{fontSize:'10px',letterSpacing:'3px',color:'rgba(128,128,128,0.7)',marginBottom:'10px'}}, [timeStr]));
+
+  // Title row
+  var titleRow = el('div', {style:{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'8px'}});
+  var h1 = el('h1', {style:{fontFamily:theme.fontFamily,fontSize:'clamp(32px,8vw,68px)',color:fg,letterSpacing:'4px',lineHeight:'1',textAlign:'center'}}, ['T-MINUS']);
+  titleRow.appendChild(h1);
+
+  // Theme menu button
+  var menuWrap = el('div', {style:{position:'absolute',right:'0',top:'50%',transform:'translateY(-50%)',zIndex:'50'}});
+  var menuBtn = el('button', {
+    style:{width:'40px',height:'40px',borderRadius:'50%',background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',cursor:'pointer',fontSize:'20px',color:fg,display:'flex',alignItems:'center',justifyContent:'center'},
+    onClick: function(e){ e.stopPropagation(); state.showMenu = !state.showMenu; render(); }
+  }, ['⋮']);
+  menuWrap.appendChild(menuBtn);
+
+  if (state.showMenu) {
+    var menuDrop = el('div', {className:'menu-dropdown', onClick:function(e){e.stopPropagation();}});
+    menuDrop.appendChild(el('div', {style:{fontSize:'9px',color:'rgba(255,255,255,0.35)',letterSpacing:'2px',padding:'6px 10px 10px',borderBottom:'1px solid rgba(255,255,255,0.06)',marginBottom:'6px'}}, ['🎨 CHOOSE THEME']));
+    // Dark
+    var darkBtn = el('button', {className:'theme-btn', onClick:function(){
+      var t = {bgColor:'#000000',fontColor:'#ffffff',fontFamily:theme.fontFamily};
+      state.theme = t; state.draftTheme = t; state.isDark = true; state.showMenu = false;
+      saveData('theme', t); render();
+    }});
+    darkBtn.appendChild(el('div', {className:'theme-swatch', style:{background:'linear-gradient(135deg,#0f0f1a,#1a1a2e)',border:'2px solid '+(state.isDark?'#6366f1':'rgba(0,0,0,0.1)')}}, ['🌙']));
+    var darkTxt = el('div');
+    darkTxt.appendChild(el('div', {style:{fontSize:'11px',fontWeight:'700',color:state.isDark?'#818cf8':'#fff',letterSpacing:'1px'}}, ['DARK']));
+    darkTxt.appendChild(el('div', {style:{fontSize:'9px',color:'rgba(255,255,255,0.4)',marginTop:'1px'}}, ['Black · easy on eyes']));
+    darkBtn.appendChild(darkTxt);
+    if (state.isDark) darkBtn.appendChild(el('div', {style:{marginLeft:'auto',width:'8px',height:'8px',borderRadius:'50%',background:'#6366f1'}}));
+    menuDrop.appendChild(darkBtn);
+    // Light
+    var lightBtn = el('button', {className:'theme-btn', onClick:function(){
+      var t = {bgColor:'#f0f4ff',fontColor:'#0f172a',fontFamily:theme.fontFamily};
+      state.theme = t; state.draftTheme = t; state.isDark = false; state.showMenu = false;
+      saveData('theme', t); render();
+    }});
+    lightBtn.appendChild(el('div', {className:'theme-swatch', style:{background:'linear-gradient(135deg,#f0f4ff,#e0e7ff)',border:'2px solid '+(!state.isDark?'#6366f1':'rgba(0,0,0,0.1)')}}, ['☀️']));
+    var lightTxt = el('div');
+    lightTxt.appendChild(el('div', {style:{fontSize:'11px',fontWeight:'700',color:!state.isDark?'#4f46e5':'rgba(0,0,0,0.7)',letterSpacing:'1px'}}, ['LIGHT']));
+    lightTxt.appendChild(el('div', {style:{fontSize:'9px',color:'rgba(128,128,128,0.6)',marginTop:'1px'}}, ['White · bright & clean']));
+    lightBtn.appendChild(lightTxt);
+    if (!state.isDark) lightBtn.appendChild(el('div', {style:{marginLeft:'auto',width:'8px',height:'8px',borderRadius:'50%',background:'#6366f1'}}));
+    menuDrop.appendChild(lightBtn);
+    menuWrap.appendChild(menuDrop);
+  }
+  titleRow.appendChild(menuWrap);
+  headerWrap.appendChild(titleRow);
+
+  var upcoming = state.exams.filter(function(e){var d=getDaysLeft(e.date);return d!==null&&d>=0;}).length;
+  headerWrap.appendChild(el('p', {style:{fontSize:'10px',color:'rgba(128,128,128,0.6)',letterSpacing:'2px'}},
+    [state.exams.length + ' EXAMS · ' + upcoming + ' UPCOMING · 🔴 LIVE SYNC']));
+  frag.appendChild(headerWrap);
+
+  // Quote
+  if (state.quote && !state.media) {
+    var quoteWrap = el('div', {style:{width:'100%',maxWidth:'640px',marginBottom:'24px',textAlign:'center',padding:'0 16px'}});
+    quoteWrap.appendChild(el('p', {style:{fontFamily:theme.fontFamily,fontSize:'clamp(14px,3vw,20px)',color:fg,lineHeight:'1.5',fontStyle:'italic'}}, ['"' + state.quote + '"']));
+    frag.appendChild(quoteWrap);
+  }
+
+  // Media
+  if (state.media) {
+    var mediaWrap = el('div', {style:{width:'100%',maxWidth:'640px',marginBottom:'24px',borderRadius:'18px',overflow:'hidden',boxShadow:'0 16px 48px rgba(0,0,0,0.5)',position:'relative'}});
+    var mediaEl = state.media.type === 'video'
+      ? el('video', {src:state.media.url,autoplay:true,loop:true,muted:true,style:{width:'100%',maxHeight:'240px',objectFit:'cover',display:'block'}})
+      : el('img', {src:state.media.url,style:{width:'100%',maxHeight:'240px',objectFit:'cover',display:'block'}});
+    mediaWrap.appendChild(mediaEl);
+    if (state.quote) {
+      var grad = el('div', {style:{position:'absolute',bottom:'0',left:'0',right:'0',height:'70%',background:'linear-gradient(to top,rgba(0,0,0,0.85),transparent)'}});
+      var qText = el('div', {style:{position:'absolute',bottom:'16px',left:'20px',right:'20px',textAlign:'center'}});
+      qText.appendChild(el('p', {style:{fontFamily:theme.fontFamily,fontSize:'clamp(13px,3vw,18px)',color:'#fff',lineHeight:'1.5',fontStyle:'italic',textShadow:'0 2px 8px rgba(0,0,0,0.8)'}}, ['"' + state.quote + '"']));
+      mediaWrap.appendChild(grad);
+      mediaWrap.appendChild(qText);
+    }
+    frag.appendChild(mediaWrap);
+  }
+
+  // Next exam hero
+  var sorted = state.exams.slice().sort(function(a,b){
+    if(a.pinned&&!b.pinned)return -1; if(!a.pinned&&b.pinned)return 1;
+    if(!a.date&&!b.date)return 0; if(!a.date)return 1; if(!b.date)return -1;
+    return new Date(a.date)-new Date(b.date);
+  });
+  var nearest = sorted.find(function(e){if(e.hidden)return false;var d=getDaysLeft(e.date);return d!==null&&d>=0;});
+  if (nearest) {
+    var heroColor = urgency(getDaysLeft(nearest.date));
+    var hero = el('div', {className:'hero', style:{background:'linear-gradient(135deg,'+nearest.color+'22,'+nearest.color+'08)',border:'1px solid '+nearest.color+'44'}});
+    if (nearest.imageUrl) hero.appendChild(el('img', {src:nearest.imageUrl,style:{width:'64px',height:'64px',borderRadius:'12px',objectFit:'cover',flexShrink:'0'}}));
+    var heroInfo = el('div', {style:{flex:'1',minWidth:'0'}});
+    heroInfo.appendChild(el('div', {style:{fontSize:'9px',color:'rgba(128,128,128,0.6)',letterSpacing:'2px',marginBottom:'4px'}}, ['⚡ NEXT EXAM UP']));
+    heroInfo.appendChild(el('div', {style:{fontFamily:theme.fontFamily,fontSize:'clamp(16px,4vw,24px)',color:fg,letterSpacing:'2px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, [nearest.name]));
+    heroInfo.appendChild(el('div', {style:{fontSize:'10px',color:'rgba(128,128,128,0.5)',marginTop:'4px'}}, [formatDate(nearest.date)]));
+    hero.appendChild(heroInfo);
+    var heroDays = el('div', {style:{textAlign:'center',flexShrink:'0'}});
+    var dLeft = getDaysLeft(nearest.date);
+    heroDays.appendChild(el('div', {className:'hero-days', style:{color:heroColor,filter:'drop-shadow(0 0 10px '+heroColor+'88)'}}, [dLeft===0?'NOW':String(dLeft)]));
+    heroDays.appendChild(el('div', {style:{fontSize:'8px',color:'rgba(128,128,128,0.4)',letterSpacing:'2px',marginTop:'3px'}}, ['T-MINUS']));
+    hero.appendChild(heroDays);
+    frag.appendChild(hero);
+  }
+
+  // Search
+  if (state.exams.length > 0) {
+    var searchWrap = el('div', {className:'section', style:{marginBottom:'16px'}});
+    var searchRow = el('div', {style:{display:'flex',gap:'10px',alignItems:'center',position:'relative'}});
+    var searchIcon = el('span', {style:{position:'absolute',left:'14px',fontSize:'14px',pointerEvents:'none'}}, ['🔍']);
+    var searchInput = el('input', {
+      className:'search-box', type:'text', value:state.searchQuery, placeholder:'Search exams...',
+      onInput: function(e){ state.searchQuery = e.target.value; render(); }
+    });
+    searchRow.appendChild(searchIcon);
+    searchRow.appendChild(searchInput);
+    var hiddenCount = state.exams.filter(function(e){return e.hidden;}).length;
+    if (hiddenCount > 0) {
+      searchRow.appendChild(el('button', {
+        style:{background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:'10px',padding:'10px 14px',color:fg,fontSize:'10px',cursor:'pointer',whiteSpace:'nowrap'},
+        onClick:function(){ state.showHidden = !state.showHidden; render(); }
+      }, [state.showHidden ? '👁 HIDE HIDDEN' : '👁 +'+hiddenCount+' HIDDEN']));
+    }
+    searchWrap.appendChild(searchRow);
+    frag.appendChild(searchWrap);
+  }
+
+  // Exam grid
+  var filtered = sorted.filter(function(e){
+    if(e.hidden&&!state.showHidden)return false;
+    if(!state.searchQuery.trim())return true;
+    var q=state.searchQuery.toLowerCase();
+    return e.name.toLowerCase().includes(q)||(e.subject||'').toLowerCase().includes(q);
+  });
+
+  if (state.exams.length === 0) {
+    frag.appendChild(el('div', {style:{textAlign:'center',padding:'48px 24px',color:'rgba(255,255,255,0.25)',fontSize:'12px',border:'2px dashed rgba(255,255,255,0.1)',borderRadius:'20px',width:'100%',maxWidth:'640px',marginBottom:'24px'}},
+      [el('div',{style:{fontSize:'48px',marginBottom:'16px'}},['📅']), el('div',{style:{letterSpacing:'2px'}},['NO EXAMS ADDED YET'])]));
+  } else {
+    var grid = el('div', {className:'exam-grid'});
+    filtered.forEach(function(exam, idx) {
+      grid.appendChild(buildExamCard(exam, idx, filtered.length));
+    });
+    frag.appendChild(grid);
+  }
+
+  // Footer tap zone (admin unlock)
+  var footer = el('div', {
+    style:{marginBottom:'16px',cursor:'default',userSelect:'none',textAlign:'center'},
+    onClick: function(){
+      var count = state.tapCount + 1;
+      state.tapCount = count;
+      clearTimeout(tapTimer);
+      if (count >= 5) { state.showPwPrompt = true; state.tapCount = 0; render(); }
+      else { tapTimer = setTimeout(function(){ state.tapCount = 0; }, 2000); }
+    }
+  });
+  footer.appendChild(el('div', {style:{fontSize:'9px',color:'rgba(255,255,255,0.15)',letterSpacing:'2px'}}, ['T-MINUS · ALL CHANGES SHARED WITH STUDENTS']));
+  frag.appendChild(footer);
+
+  // Password modal
+  if (state.showPwPrompt) {
+    var modal = el('div', {className:'modal-bg', onClick:function(){ state.showPwPrompt=false; render(); }});
+    var mbox = el('div', {className:'modal', onClick:function(e){e.stopPropagation();}});
+    mbox.appendChild(el('div', {style:{textAlign:'center',fontFamily:theme.fontFamily,fontSize:'24px',color:'#fff',marginBottom:'6px'}}, ['🔐 ADMIN ACCESS']));
+    mbox.appendChild(el('div', {style:{textAlign:'center',fontSize:'10px',color:'rgba(255,255,255,0.35)',letterSpacing:'1px',marginBottom:'20px'}}, ['Enter your admin password']));
+    var pwInp = el('input', {
+      type:'password', placeholder:'Password...', value:state.pwInput,
+      style:{width:'100%',background:'rgba(255,255,255,0.07)',border:'1px solid '+(state.pwError?'#ef4444':'rgba(255,255,255,0.15)'),borderRadius:'10px',padding:'12px 16px',color:'#fff',fontSize:'14px',outline:'none',marginBottom:'8px',textAlign:'center',letterSpacing:'3px'},
+      onInput:function(e){state.pwInput=e.target.value;state.pwError=false;},
+      onKeydown:function(e){if(e.key==='Enter')checkPw();}
+    });
+    setTimeout(function(){if(pwInp)pwInp.focus();},100);
+    mbox.appendChild(pwInp);
+    if (state.pwError) mbox.appendChild(el('div', {style:{color:'#ef4444',textAlign:'center',fontSize:'10px',marginBottom:'8px'}}, ['❌ Wrong password']));
+    var btns = el('div', {style:{display:'flex',gap:'8px',marginTop:'8px'}});
+    btns.appendChild(el('button', {className:'btn-green', onClick:checkPw}, ['UNLOCK']));
+    btns.appendChild(el('button', {className:'btn-outline', onClick:function(){state.showPwPrompt=false;state.pwInput='';state.pwError=false;render();}}, ['CANCEL']));
+    mbox.appendChild(btns);
+    modal.appendChild(mbox);
+    frag.appendChild(modal);
+  }
+
+  // Admin toggle
+  if (state.adminUnlocked) {
+    var adminToggle = el('div', {className:'section', style:{marginBottom:'16px'}});
+    adminToggle.appendChild(el('button', {
+      style:{width:'100%',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:'12px',padding:'10px 24px',color:fg,fontSize:'11px',letterSpacing:'2px',cursor:'pointer'},
+      onClick:function(){ state.adminOpen = !state.adminOpen; render(); }
+    }, [state.adminOpen ? '▲ CLOSE ADMIN PANEL' : '⚙️ OPEN ADMIN PANEL']));
+    adminToggle.appendChild(el('div', {style:{textAlign:'center',marginTop:'6px'}},
+      [el('span', {style:{fontSize:'9px',color:'rgba(255,255,255,0.25)',cursor:'pointer',letterSpacing:'1px'}, onClick:function(){state.adminUnlocked=false;state.adminOpen=false;render();}}, ['🔒 lock admin'])]
+    ));
+    frag.appendChild(adminToggle);
+  }
+
+  // Admin panel
+  if (state.adminUnlocked && state.adminOpen) {
+    frag.appendChild(buildAdminPanel());
+  }
+
+  return frag;
+}
+
+function buildExamCard(exam, idx, total) {
+  var days = getDaysLeft(exam.date);
+  var color = urgency(days);
+  var isExpanded = state.expandedId === exam.id;
+  var wrap = el('div', {style:{opacity:exam.hidden?'0.5':'1',transition:'opacity 0.2s'}});
+  var card = el('div', {
+    className:'exam-card' + (isExpanded?' expanded':'') + (exam.pinned?' pinned':''),
+    style:{'--color': exam.color}
+  });
+
+  card.addEventListener('click', function(){ state.expandedId = isExpanded ? null : exam.id; render(); });
+
+  if (exam.pinned) {
+    card.appendChild(el('div', {className:'pinned-badge'}, ['📌 PINNED']));
+  }
+
+  var body = el('div', {className:'card-body', style:{background:'linear-gradient(135deg,'+exam.color+'33,'+exam.color+'11)',borderBottom:'1px solid '+exam.color+'33'}});
+  body.appendChild(el('div', {className:'card-dot', style:{background:exam.color,boxShadow:'0 0 12px '+exam.color}}));
+  var titleDiv = el('div', {className:'card-title'});
+  if (exam.subject) titleDiv.appendChild(el('div', {className:'card-subject'}, [exam.subject]));
+  titleDiv.appendChild(el('div', {className:'card-name', style:{color:state.theme.fontColor}}, [exam.name||'Unnamed Exam']));
+  body.appendChild(titleDiv);
+  var daysDiv = el('div', {className:'card-days'});
+  daysDiv.appendChild(el('div', {className:'days-num', style:{color:color,filter:'drop-shadow(0 0 8px '+color+'88)'}}, [days===null?'--':days<0?'DONE':days===0?'NOW':String(days)]));
+  daysDiv.appendChild(el('div', {className:'days-label'}, [days===null?'NO DATE':days<0?'PASSED':days===0?'TODAY':'T-MINUS']));
+  body.appendChild(daysDiv);
+  card.appendChild(body);
+
+  // Progress bar
+  var pct = days !== null && days >= 0 ? Math.max(0, Math.min(100, 100 - days/3.65)) : 100;
+  var pb = el('div', {className:'progress-bar'});
+  var track = el('div', {className:'progress-track'});
+  track.appendChild(el('div', {className:'progress-fill', style:{width:pct+'%',background:color}}));
+  pb.appendChild(track);
+  pb.appendChild(el('div', {style:{fontSize:'9px',color:'rgba(255,255,255,0.3)',marginLeft:'12px',whiteSpace:'nowrap'}}, [isExpanded?'▲':'▼']));
+  card.appendChild(pb);
+
+  // Expanded details
+  if (isExpanded) {
+    var det = el('div', {className:'details-panel'});
+    if (exam.date) det.appendChild(el('div', {style:{fontSize:'10px',color:'rgba(255,255,255,0.5)',letterSpacing:'1px',marginBottom:'12px'}}, ['📅 '+formatDate(exam.date)]));
+    if (days !== null && days > 0) {
+      var boxes = el('div', {className:'time-boxes'});
+      [[Math.floor(days/7),'WEEKS'],[days%7,'DAYS'],[23-new Date().getHours(),'HOURS']].forEach(function(pair){
+        var b = el('div', {className:'time-box'});
+        b.appendChild(el('div', {className:'time-val', style:{color:color}}, [String(pair[0])]));
+        b.appendChild(el('div', {className:'time-lbl'}, [pair[1]]));
+        boxes.appendChild(b);
+      });
+      det.appendChild(boxes);
+    }
+    if (days === 0) det.appendChild(el('div', {style:{fontSize:'12px',color:'#f59e0b',letterSpacing:'2px',marginBottom:'14px'}}, ['🔥 EXAM IS TODAY — GOOD LUCK!']));
+    if (days !== null && days < 0) det.appendChild(el('div', {style:{fontSize:'11px',color:'rgba(255,255,255,0.4)',letterSpacing:'2px',marginBottom:'14px'}}, ['✓ This exam has passed.']));
+
+    var optWrap = el('div', {style:{borderTop:'1px solid rgba(255,255,255,0.07)',paddingTop:'12px',position:'relative'}});
+    var showOpt = false;
+    var optBtn = el('button', {className:'options-btn', onClick:function(e){
+      e.stopPropagation(); showOpt = !showOpt;
+      var menu = optWrap.querySelector('.options-menu');
+      if (showOpt && !menu) {
+        var om = el('div', {className:'options-menu'});
+        om.addEventListener('click', function(e){e.stopPropagation();});
+        om.appendChild(el('button', {className:'opt-btn', onClick:function(){
+          state.exams = state.exams.map(function(ex){return ex.id===exam.id?Object.assign({},ex,{pinned:!ex.pinned}):ex;});
+          saveData('exams',state.exams); state.expandedId=null; render();
+        }}, [exam.pinned?'📌 UNPIN':'📌 PIN TO TOP']));
+        om.appendChild(el('button', {className:'opt-btn', onClick:function(){
+          state.exams = state.exams.map(function(ex){return ex.id===exam.id?Object.assign({},ex,{hidden:!ex.hidden}):ex;});
+          saveData('exams',state.exams); state.expandedId=null; render();
+        }}, ['👁 HIDE FROM VIEW']));
+        optWrap.appendChild(om);
+      } else if (menu) { menu.remove(); }
+    }}, ['··· OPTIONS']);
+    optWrap.appendChild(optBtn);
+    det.appendChild(optWrap);
+    card.appendChild(det);
+  }
+
+  wrap.appendChild(card);
+  return wrap;
+}
+
+function buildAdminPanel() {
+  var panel = el('div', {className:'admin-panel', style:{animation:'fadeIn 0.3s ease'}});
+  var tabs = el('div', {className:'tabs'});
+  [['exams','📅 EXAMS'],['theme','🎨 THEME'],['media','🎬 MEDIA']].forEach(function(t){
+    tabs.appendChild(el('button', {
+      className:'tab'+(state.adminTab===t[0]?' active':''),
+      onClick:function(){ state.adminTab=t[0]; state.editingExam=null; render(); }
+    }, [t[1]]));
+  });
+  panel.appendChild(tabs);
+
+  var content = el('div', {className:'tab-content'});
+
+  if (state.adminTab === 'exams') content.appendChild(buildExamsTab());
+  if (state.adminTab === 'theme') content.appendChild(buildThemeTab());
+  if (state.adminTab === 'media') content.appendChild(buildMediaTab());
+
+  panel.appendChild(content);
+  return panel;
+}
+
+function buildExamsTab() {
+  var frag = document.createDocumentFragment();
+  var header = el('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}});
+  header.appendChild(el('div', {style:{fontSize:'11px',color:'rgba(255,255,255,0.5)'}}, [state.exams.length+' EXAMS']));
+  header.appendChild(el('button', {
+    style:{background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:'10px',padding:'8px 16px',color:state.theme.fontColor,fontSize:'11px',cursor:'pointer',letterSpacing:'1px'},
+    onClick:function(){ state.editingExam='new'; state.examDraft={id:uid(),name:'',date:'',imageUrl:'',color:EXAM_COLORS[state.exams.length%EXAM_COLORS.length],subject:'',pinned:false,hidden:false,order:0}; render(); }
+  }, ['+ ADD EXAM']));
+  frag.appendChild(header);
+
+  if (state.editingExam === 'new') frag.appendChild(buildExamEditor(state.examDraft, true));
+
+  state.exams.forEach(function(exam){
+    if (state.editingExam === exam.id) {
+      frag.appendChild(buildExamEditor(state.examDraft, false));
+    } else {
+      var row = el('div', {className:'exam-row'});
+      var dot = el('div', {style:{width:'10px',height:'10px',borderRadius:'50%',background:urgency(getDaysLeft(exam.date)),flexShrink:'0'}});
+      row.appendChild(dot);
+      var info = el('div', {style:{flex:'1',minWidth:'0'}});
+      info.appendChild(el('div', {style:{fontSize:'12px',color:state.theme.fontColor,fontWeight:'700',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, [(exam.pinned?'📌 ':''),(exam.hidden?'🙈 ':'')+exam.name]));
+      info.appendChild(el('div', {style:{fontSize:'9px',color:'rgba(255,255,255,0.4)',marginTop:'2px'}}, [(exam.subject?exam.subject+' · ':'')+formatDate(exam.date)]));
+      row.appendChild(info);
+      row.appendChild(el('button', {
+        style:{background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:'7px',padding:'5px 10px',color:'rgba(255,255,255,0.7)',fontSize:'10px',cursor:'pointer'},
+        onClick:function(){ state.editingExam=exam.id; state.examDraft=Object.assign({},exam); render(); }
+      }, ['EDIT']));
+      frag.appendChild(row);
+    }
+  });
+  return frag;
+}
+
+function buildExamEditor(draft, isNew) {
+  var box = el('div', {style:{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'16px',padding:'20px',marginBottom:'12px'}});
+  box.appendChild(el('div', {style:{fontSize:'11px',color:state.theme.fontColor,letterSpacing:'2px',marginBottom:'16px',fontWeight:'700'}}, [isNew?'➕ NEW EXAM':'✏️ EDIT EXAM']));
+
+  function lbl(text){ return el('span', {className:'label'}, [text]); }
+  function inp(val, key, ph){
+    return el('input', {className:'input-field',type:'text',value:val,placeholder:ph,
+      onInput:function(e){ draft[key]=e.target.value; }});
+  }
+
+  box.appendChild(lbl('EXAM NAME *'));
+  box.appendChild(inp(draft.name,'name','e.g. Final Mathematics Exam'));
+  box.appendChild(lbl('SUBJECT'));
+  box.appendChild(inp(draft.subject,'subject','e.g. Mathematics, Science...'));
+  box.appendChild(lbl('EXAM DATE *'));
+  var dateInp = el('input', {className:'input-field',type:'date',value:draft.date,
+    onChange:function(e){ draft.date=e.target.value; }});
+  box.appendChild(dateInp);
+  box.appendChild(lbl('IMAGE URL'));
+  box.appendChild(inp(draft.imageUrl,'imageUrl','Paste image URL here...'));
+  box.appendChild(lbl('ACCENT COLOR'));
+  var colorRow = el('div', {style:{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap',marginTop:'6px'}});
+  colorRow.appendChild(el('input', {type:'color',value:draft.color,style:{width:'40px',height:'40px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.15)',background:'none',cursor:'pointer',padding:'2px'},
+    onInput:function(e){ draft.color=e.target.value; }}));
+  EXAM_COLORS.forEach(function(c){
+    colorRow.appendChild(el('div', {
+      className:'color-dot'+(draft.color===c?' selected':''),
+      style:{background:c},
+      onClick:function(){ draft.color=c; var ci=box.querySelector('input[type=color]'); if(ci)ci.value=c; }
+    }));
+  });
+  box.appendChild(colorRow);
+
+  var btnRow = el('div', {style:{display:'flex',gap:'8px',marginTop:'18px'}});
+  var saveBtn = el('button', {className:'btn-green', onClick:function(){
+    if(!draft.name||!draft.date) return alert('Please fill in exam name and date!');
+    if(isNew){ state.exams.push(draft); }
+    else { state.exams = state.exams.map(function(e){return e.id===draft.id?draft:e;}); }
+    saveData('exams', state.exams); state.editingExam=null; render();
+  }}, [isNew?'ADD EXAM':'SAVE']);
+  btnRow.appendChild(saveBtn);
+  if (!isNew) {
+    btnRow.appendChild(el('button', {className:'btn-red', onClick:function(){
+      if(confirm('Delete this exam?')){ state.exams=state.exams.filter(function(e){return e.id!==draft.id;}); saveData('exams',state.exams); state.editingExam=null; render(); }
+    }}, ['DELETE']));
+  }
+  btnRow.appendChild(el('button', {className:'btn-outline', onClick:function(){ state.editingExam=null; render(); }}, ['CANCEL']));
+  box.appendChild(btnRow);
+  return box;
+}
+
+function buildThemeTab() {
+  var frag = document.createDocumentFragment();
+  var dt = state.draftTheme;
+
+  frag.appendChild(el('span', {className:'label'}, ['FONT']));
+  var fontRow = el('div', {style:{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'20px'}});
+  FONTS.forEach(function(f){
+    fontRow.appendChild(el('button', {
+      className:'font-btn'+(dt.fontFamily===f.value?' selected':''),
+      style:{fontFamily:f.value},
+      onClick:function(){ state.draftTheme.fontFamily=f.value; render(); }
+    }, [f.label]));
+  });
+  frag.appendChild(fontRow);
+
+  [{label:'BG COLOR',key:'bgColor',presets:BG_PRESETS},{label:'FONT COLOR',key:'fontColor',presets:FG_PRESETS}].forEach(function(cfg){
+    frag.appendChild(el('span', {className:'label'}, [cfg.label]));
+    var row = el('div', {style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'8px'}});
+    row.appendChild(el('input', {type:'color',value:dt[cfg.key],style:{width:'44px',height:'44px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.15)',background:'none',cursor:'pointer',padding:'2px'},
+      onInput:function(e){ state.draftTheme[cfg.key]=e.target.value; render(); }}));
+    row.appendChild(el('span', {style:{fontSize:'11px',color:'rgba(255,255,255,0.5)'}}, [dt[cfg.key].toUpperCase()]));
+    frag.appendChild(row);
+    var presets = el('div', {style:{display:'flex',flexWrap:'wrap',marginBottom:'12px'}});
+    cfg.presets.forEach(function(c){
+      presets.appendChild(el('div', {
+        className:'preset-color'+(dt[cfg.key]===c?' selected':''),
+        style:{background:c},
+        onClick:function(){ state.draftTheme[cfg.key]=c; render(); }
+      }));
+    });
+    frag.appendChild(presets);
+  });
+
+  // Preview
+  var preview = el('div', {style:{background:dt.bgColor,border:'1px solid rgba(128,128,128,0.2)',borderRadius:'12px',padding:'14px 18px',marginBottom:'16px',display:'flex',alignItems:'center',justifyContent:'space-between'}});
+  preview.appendChild(el('div', {style:{fontFamily:dt.fontFamily,fontSize:'22px',color:dt.fontColor}}, ['T-MINUS']));
+  preview.appendChild(el('div', {style:{fontFamily:dt.fontFamily,fontSize:'40px',color:dt.fontColor}}, ['42']));
+  frag.appendChild(preview);
+
+  frag.appendChild(el('button', {
+    style:{width:'100%',background:state.savedTheme?'#22c55e':'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:'12px',padding:'13px',color:state.theme.fontColor,fontSize:'12px',letterSpacing:'2px',cursor:'pointer',transition:'all 0.3s'},
+    onClick:function(){
+      state.theme = Object.assign({}, state.draftTheme);
+      saveData('theme', state.theme);
+      state.savedTheme = true;
+      render();
+      setTimeout(function(){ state.savedTheme=false; render(); }, 2500);
+    }
+  }, [state.savedTheme?'✓ SYNCED TO ALL DEVICES':'APPLY THEME FOR ALL STUDENTS']));
+  return frag;
+}
+
+function buildMediaTab() {
+  var frag = document.createDocumentFragment();
+  frag.appendChild(el('span', {className:'label'}, ['🎬 MOTIVATIONAL MEDIA']));
+
+  var uploadLabel = el('label', {style:{display:'block',border:'2px dashed rgba(255,255,255,0.2)',borderRadius:'14px',padding:'24px',textAlign:'center',cursor:'pointer',marginBottom:'12px',background:'rgba(255,255,255,0.03)'}});
+  uploadLabel.appendChild(el('div', {style:{fontSize:'28px',marginBottom:'8px'}}, ['📁']));
+  uploadLabel.appendChild(el('div', {style:{fontSize:'11px',color:'rgba(255,255,255,0.5)'}}, [state.draftMedia?state.draftMedia.name:'TAP TO UPLOAD IMAGE / GIF / VIDEO']));
+  var fileInp = el('input', {type:'file',accept:'image/*,video/*,.gif',style:{display:'none'},onChange:function(e){
+    var f=e.target.files[0]; if(!f) return;
+    var r=new FileReader();
+    r.onload=function(ev){ state.draftMedia={url:ev.target.result,type:f.type.startsWith('video/')?'video':'image',name:f.name}; render(); };
+    r.readAsDataURL(f);
+  }});
+  uploadLabel.appendChild(fileInp);
+  frag.appendChild(uploadLabel);
+
+  frag.appendChild(el('span', {className:'label'}, ['MOTIVATIONAL QUOTE']));
+  frag.appendChild(el('textarea', {
+    className:'input-field', rows:3, placeholder:'Enter a motivational quote...',
+    style:{marginBottom:'12px',resize:'vertical'},
+    onInput:function(e){ state.draftQuote=e.target.value; }
+  }, [state.draftQuote]));
+
+  var presetsList = el('div', {style:{display:'flex',flexDirection:'column',gap:'6px',marginBottom:'16px',maxHeight:'140px',overflowY:'auto'}});
+  PRESET_QUOTES.forEach(function(q){
+    presetsList.appendChild(el('button', {
+      style:{background:state.draftQuote===q?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,'+(state.draftQuote===q?'0.3':'0.08')+')',borderRadius:'8px',padding:'8px 12px',color:'rgba(255,255,255,0.7)',fontSize:'10px',cursor:'pointer',textAlign:'left',lineHeight:'1.5'},
+      onClick:function(){ state.draftQuote=q; render(); }
+    }, [q]));
+  });
+  frag.appendChild(presetsList);
+
+  frag.appendChild(el('button', {
+    style:{width:'100%',background:state.savedMedia?'#22c55e':'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.2)',borderRadius:'12px',padding:'13px',color:state.theme.fontColor,fontSize:'12px',letterSpacing:'2px',cursor:'pointer',transition:'all 0.3s'},
+    onClick:function(){
+      state.media = state.draftMedia; state.quote = state.draftQuote;
+      if(state.draftMedia) saveData('media', state.draftMedia);
+      saveData('quote', state.draftQuote);
+      state.savedMedia=true; render();
+      setTimeout(function(){ state.savedMedia=false; render(); }, 2500);
+    }
+  }, [state.savedMedia?'✓ SYNCED TO ALL DEVICES':'SAVE MEDIA & QUOTE']));
+  return frag;
+}
+
+function checkPw() {
+  if (state.pwInput === ADMIN_PASSWORD) {
+    state.adminUnlocked=true; state.adminOpen=true;
+    state.showPwPrompt=false; state.pwInput=''; state.pwError=false;
+    render();
+  } else { state.pwError=true; render(); }
+}
+
+// ── Close menu on outside click ───────────────────────────────
+document.addEventListener('click', function(){ if(state.showMenu){ state.showMenu=false; render(); } });
+
+// ── Clock ─────────────────────────────────────────────────────
+setInterval(function(){ state.now=new Date(); render(); }, 1000);
+
+// ── Firebase listeners ────────────────────────────────────────
+fbListen('theme', function(v){ state.theme=v; state.draftTheme=v; state.isDark=(v.bgColor==='#000000'); render(); });
+fbListen('exams', function(v){ state.exams=v||[]; render(); });
+fbListen('media', function(v){ state.media=v; state.draftMedia=v; render(); });
+fbListen('quote', function(v){ state.quote=v||''; state.draftQuote=v||''; render(); });
+
+// ── Init: show app after brief delay ─────────────────────────
+setTimeout(function(){
+  document.getElementById('loader').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  render();
+}, 1500);
+</script>
+</body>
+</html>
